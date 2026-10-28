@@ -47,19 +47,76 @@ function teacherScenario() {
   ${state.classes.slice().reverse().map(c=>`<section class="card" style="margin-top:20px"><h2>${esc(c.title)}</h2><p>${esc(c.scenario.title)} · ${new Date(c.date).toLocaleDateString('ko-KR')}</p><p>대표에게 알려 줄 수업 코드</p><div class="code">${c.code}</div><div class="row"><button class="secondary" onclick="control('${c.code}','time')">전체 시간 +2분</button><button class="secondary" onclick="control('${c.code}','next')">전체 다음 단계</button></div>
   ${c.groups.map(g=>`<details><summary>${esc(g.name)} · ${g.members.length}/${g.size}명 · ${g.started?esc(c.scenario.phases[g.phase]):'접속 중'}</summary><p>모둠 코드 ${g.code}</p>${g.answer?scenarioAnswer(g.answer,c.scenario):'<p>아직 제출하지 않았어요.</p>'}<h3>학생별 실천 약속</h3>${g.members.map(m=>`<p><b>${esc(m.nickname)}</b> · ${esc(m.pledge||'아직 정하지 않았어요.')}</p>`).join('')}</details>`).join('')}</section>`).join('')}`;
 }
-function roleCards() {
- return state.roles.map(r=>`<section class="card role-card"><h2>${esc(r.title)}</h2>
- ${state.group.size<5?`<div class="result"><b>핵심 사실 3줄 요약</b>${r.summary.map(t=>`<p>• ${esc(t)}</p>`).join('')}</div>`:''}
- ${prose(r.text)}${r.clues.map(i=>{const c=state.clues.find(c=>c.i===i);return `<article class="clue"><h3>단서 ${esc(c.id)} · ${esc(c.title)}</h3>${illustration(c.id)}${prose(c.text)}<label class="check"><input type="checkbox"><span>이 단서에서 내가 알고 있는 사실을 확인했어요.</span></label></article>`}).join('')}</section>`).join('');
+const cardViews = new Map();
+function cardViewKey() {
+ return state.group.code + ':' + state.roles.map(r=>r.title).join('|');
 }
+function cardViewState() {
+ const key=cardViewKey();
+ if(!cardViews.has(key))cardViews.set(key,{tab:'roles',read:new Set()});
+ return cardViews.get(key);
+}
+function roleCards() {
+ return state.roles.map(r=>`<article class="card role-card"><span class="eyebrow">나의 역할 카드</span><h2>${esc(r.title)}</h2>
+ <div class="result"><b>핵심 사실 3줄 요약</b>${r.summary.map(t=>`<p>• ${esc(t)}</p>`).join('')}</div>
+ ${prose(r.text.split('### 말하기 예시')[0])}</article>`).join('');
+}
+function clueCards() {
+ const view=cardViewState();
+ return state.roles.map(r=>`<section class="clue-set"><h2>${esc(r.title)}의 단서</h2>${r.clues.map(i=>{
+  const c=state.clues.find(c=>c.i===i);
+  return `<article class="clue"><span class="eyebrow">나의 단서 카드 ${esc(c.id)}</span><h3>${esc(c.title)}</h3>${illustration(c.id)}${prose(c.text)}<label class="check"><input type="checkbox" data-read-clue="${i}" ${view.read.has(i)?'checked':''}><span>이 단서를 읽고 친구에게 설명할 준비가 됐어요.</span></label></article>`;
+ }).join('')}</section>`).join('');
+}
+function scriptCards() {
+ return `<p class="hint">그대로 읽어도 좋고 내 말로 바꿔도 좋아요. 질문을 받으면 카드에 적힌 사실대로 답해요.</p>`+state.roles.map(r=>{
+  const script=r.text.split('### 말하기 예시')[1]||'';
+  const lines=script.split('\n').filter(line=>line.startsWith('>')&&line.slice(1).trim()).map(line=>line.replace(/^>\s?/,''));
+  return `<article class="card script-card"><span class="eyebrow">${esc(r.title)} · 예시 대본</span><h2>${esc(r.title)}</h2><p class="dialogue-label">이렇게 소개해요</p><blockquote class="speech">“저는 ${esc(r.title.replace(':','인'))}입니다. 제가 알고 있는 일을 이야기할게요.”</blockquote><p class="dialogue-label">관련 질문을 받으면 이렇게 말해요</p>${lines.map(line=>`<blockquote class="speech">${esc(line)}</blockquote>`).join('')}<p class="dialogue-label">친구의 근거를 물어봐요</p><blockquote class="speech">“어떤 단서를 보고 그렇게 생각했나요?”</blockquote></article>`;
+ }).join('');
+}
+function studentCardDesk() {
+ const view=cardViewState();
+ const tabs=[['roles','역할 카드',state.roles.length],['clues','단서 카드',state.clues.length],['scripts','예시 대본',state.roles.length]];
+ return `<section class="card-desk" aria-label="나의 탐정 수첩"><div class="section-title"><h2>나의 탐정 수첩</h2><span>내가 맡은 인물의 자료</span></div>
+ ${state.roles.length>1?'<p class="hint">두 역할을 맡았어요. 대본을 말하기 전에 어떤 인물인지 먼저 알려 주세요.</p>':''}
+ <div class="card-tabs" role="tablist" aria-label="카드 종류">${tabs.map(([id,label,count])=>`<button type="button" role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="${view.tab===id}" tabindex="${view.tab===id?0:-1}" data-card-tab="${id}">${label} <span>${count}</span></button>`).join('')}</div>
+ <section id="panel-roles" role="tabpanel" aria-labelledby="tab-roles" tabindex="0" ${view.tab==='roles'?'':'hidden'}>${roleCards()}</section>
+ <section id="panel-clues" role="tabpanel" aria-labelledby="tab-clues" tabindex="0" ${view.tab==='clues'?'':'hidden'}><p id="read-progress" role="status">읽은 단서 ${view.read.size} / ${state.clues.length}개</p>${clueCards()}</section>
+ <section id="panel-scripts" role="tabpanel" aria-labelledby="tab-scripts" tabindex="0" ${view.tab==='scripts'?'':'hidden'}>${scriptCards()}</section></section>`;
+}
+function selectCardTab(id) {
+ cardViewState().tab=id;
+ for(const tab of document.querySelectorAll('[data-card-tab]')) {
+  const selected=tab.dataset.cardTab===id;
+  tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;
+  document.getElementById('panel-'+tab.dataset.cardTab).hidden=!selected;
+ }
+}
+document.addEventListener('click',event=>{
+ const tab=event.target.closest('[data-card-tab]');if(tab)selectCardTab(tab.dataset.cardTab);
+});
+document.addEventListener('keydown',event=>{
+ const tab=event.target.closest('[data-card-tab]');if(!tab||!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+ event.preventDefault();const tabs=[...document.querySelectorAll('[data-card-tab]')];
+ let i=tabs.indexOf(tab);i=event.key==='Home'?0:event.key==='End'?tabs.length-1:(i+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
+ selectCardTab(tabs[i].dataset.cardTab);tabs[i].focus();
+});
+document.addEventListener('change',event=>{
+ if(!event.target.matches('[data-read-clue]'))return;
+ const view=cardViewState(),i=Number(event.target.dataset.readClue);
+ if(event.target.checked)view.read.add(i);else view.read.delete(i);
+ document.getElementById('read-progress').textContent=`읽은 단서 ${view.read.size} / ${state.clues.length}개`;
+});
 function studentScenario() {
  view='student';const g=state.group,s=state.scenario;
  app.innerHTML=`<div class="intro"><div><span class="eyebrow">CASE 01 · 푸른달 마을</span><h1>${esc(g.name)}</h1><p>${g.members.map(m=>esc(m.nickname)).join(' · ')}</p></div><span class="pill">모둠 참여 코드 <b>${g.code}</b></span></div>
  ${!g.started?`<section class="card"><h2>탐정들이 모이고 있어요 (${g.members.length}/${g.size})</h2><p>모두 모이면 대표가 시작해요.</p>${state.leader?'<button onclick="advance()">모두 모였어요 · 시작하기</button>':'<p>대표가 시작하면 나의 역할이 나타나요.</p>'}</section>`:
  `<div class="steps">${s.phases.map((p,i)=>`<span class="${i===g.phase?'active':''}">${i+1}. ${esc(p)}</span>`).join('')}</div><div class="row"><span class="pill" id="timer"></span><span class="pill">${state.roles.map(r=>esc(r.title)).join(' + ')}</span></div>
- ${g.phase===s.resultPhase?scenarioResult():`<details class="card" ${g.phase===0?'open':''}><summary>${esc(s.title)} · 공통 사건 소개와 약속</summary>${prose(s.intro)}</details>
+ ${studentCardDesk()}
+ ${g.phase===s.resultPhase?scenarioResult():`<details class="card"><summary>${esc(s.title)} · 공통 사건 소개와 약속</summary>${prose(s.intro)}</details>
  ${g.phase<s.submitPhase?`<section class="card"><h2>${esc(s.steps[g.phase].title)}</h2>${prose(s.steps[g.phase].text)}</section>`:scenarioSubmission()}
- <details class="role-drawer" ${g.phase===0?'open':''}><summary>내 역할과 단서 다시 보기 (${state.roles.length}개 역할 · ${state.clues.length}개 단서)</summary>${state.roles.length>1?'<p class="hint">두 역할을 맡았어요. “이번에는 시장 상인으로서 말씀드릴게요”처럼 인물 이름을 먼저 말해요.</p>':''}${roleCards()}</details>
+
  ${state.leader&&g.phase<s.submitPhase?'<button class="next-step" onclick="advance()">모두 이야기를 나눴어요 · 다음 단계 →</button>':''}`}`}`;
  tick();
 }
