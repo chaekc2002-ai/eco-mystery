@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test",
-    "build": "node --check server.js && node --check storage.js && node --check public/app.js"
+    "build": "node --check server.js && node --check storage.js && node --check scenarios/index.js && node --check public/app.js && node --check public/scenario-ui.js"
   },
   "engines": {
     "node": "24.x"
